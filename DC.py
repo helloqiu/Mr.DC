@@ -160,10 +160,15 @@ def make_basic_auth_view(username='', password='', next=['/']):
 def make_form_auth_view(username='', password='', next=['/'], action='/'):
   def _():
     if request.method == 'GET':
+      if username == request.cookies.get('username', '') and password == request.cookies.get('password', ''):
+        return render_template('next.html', urls=next)
       return render_template('form_auth.html', action=action)
     elif request.method == 'POST':
       if username == request.form.get('username', '') and password == request.form.get('password', ''):
-        return render_template('next.html', urls=next)
+        resp = Response(render_template('next.html', urls=next))
+        resp.set_cookie('username', username)
+        resp.set_cookie('password', password)
+        return resp
       else:
         return render_template('form_auth.html', action=action)
   return _
@@ -172,13 +177,9 @@ def make_cookie_auth_view(username='', password='', next=['/']):
   def _():
     if username == request.cookies.get('username', '') and password == request.cookies.get('password', ''):
       resp = Response(render_template('next.html', urls=next))
-      resp.set_cookie('username', username)
-      resp.set_cookie('password', password)
       return resp
     else:
       resp = Response('Please Login', 401)
-      resp.set_cookie('username', '')
-      resp.set_cookie('password', '')
       return resp
   return _
 
