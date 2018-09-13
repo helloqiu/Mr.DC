@@ -124,7 +124,6 @@ _routes = {}
 @app.route('/<path:url>', methods=['GET', 'POST'])
 @app.route('/', methods=['GET', 'POST'])
 def route(url=''):
-  print(url)
   url = '/{}'.format(url)
   if url == 'api/set_config':
     return set_config()
@@ -172,9 +171,15 @@ def make_form_auth_view(username='', password='', next=['/'], action='/'):
 def make_cookie_auth_view(username='', password='', next=['/']):
   def _():
     if username == request.cookies.get('username', '') and password == request.cookies.get('password', ''):
-      return render_template('next.html', urls=next)
+      resp = Response(render_template('next.html', urls=next))
+      resp.set_cookie('username', username)
+      resp.set_cookie('password', password)
+      return resp
     else:
-      return Response('Please Login', 401)
+      resp = Response('Please Login', 401)
+      resp.set_cookie('username', '')
+      resp.set_cookie('password', '')
+      return resp
   return _
 
 def add_route_from_config(config_item_list: list):
