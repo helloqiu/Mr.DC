@@ -71,23 +71,100 @@ Nmmdhso++////++///::::::::::::::///:::::::::::://////::::::::-:://yddddmmmmddmmm
 ys++//+++++//+/////:::::::::::::://::::::::::::::::::::::::::::://dmmddmmmmmmmmmmmmmddy++++//////+//
 """
 
-from flask import Flask, request
+from flask import Flask, request, abort, Response, render_template
+import json
 
 app = Flask(__name__)
 config = [
   {
     'path': '/',
+    'type': 'auth',
     'auth': {
-      'type': 'bacic_auth',
+      'type': 'basic_auth',
       'username': 'admin',
       'password': '123456'
-    }
+    },
+    'next': ['/dc1', '/dc2']
+  },
+  {
+    'path': '/dc2',
+    'type': 'auth',
+    'auth': {
+      'type': 'form_auth',
+      'username': 'admin',
+      'password': '123456'
+    },
+    'next': ['/dc2/dc']
+  },
+  {
+    'path': '/dc1',
+    'type': 'xss'
+  },
+  {
+    'path': '/dc2/dc',
+    'type': 'xss'
   }
 ]
+_routes = {}
 
-@app.route('/api/set_config')
+@app.route('/<path:url>', methods=['GET', 'POST'])
+@app.route('/', methods=['GET', 'POST'])
+def route(url=''):
+  print(url)
+  url = '/{}'.format(url)
+  if url == 'api/set_config':
+    return set_config()
+  else:
+    handler = _routes.get(url, None)
+    if handler:
+      return handler()
+  abort(404)
+
 def set_config():
   if request.method == 'POST':
-    global config
-    config = request.args.get('config', config)
+    try:
+      global config
+      config = json.loads(request.args.get('config', json.dumps(config)))
+      global _routes
+      _routes = {}
+      add_route_from_config(config)
+    except:
+      abort(403)
     return 'Rust master DC No.1!'
+
+def make_basic_auth_view(username='', password='', next='/'):
+  def _():
+    auth = request.authorization
+    if not auth or auth.username != username or auth.password != password:
+      return Response('Please Login', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
+    else:
+      return render_template('next.html', urls=next)
+  return _
+
+def make_form_auth_view(username='', password='', next=['/'], action='/'):
+  def _():
+    if request.method == 'GET':
+      return render_template('form_auth.html', action=action)
+    elif request.method == 'POST':
+      if username == request.form.get('username', '') and password == request.form.get('password', ''):
+        return render_template('next.html', urls=next)
+      else:
+        return render_template('form_auth.html', action=action)
+  return _
+
+def add_route_from_config(config_item_list: list):
+  for item in config_item_list:
+    if item['type'] == 'auth':
+      if item['auth']['type'] == 'basic_auth':
+        _routes[item['path']] = make_basic_auth_view(item['auth']['username'], item['auth']['password'], item['next'])
+      elif item['auth']['type'] == 'form_auth':
+        _routes[item['path']] = make_form_auth_view(item['auth']['username'], item['auth']['password'], item['next'], item['path'])
+    elif item['type'] == 'xss':
+      def _():
+        if request.method == 'GET':
+          return render_template('xss.html', action=item['path'])
+        elif request.method == 'POST':
+          return request.form.get('hello', '')
+      _routes[item['path']] = _
+
+add_route_from_config(config)
