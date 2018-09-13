@@ -77,14 +77,14 @@ import json
 app = Flask(__name__)
 config = [
   {
-    'path': '/',
+    'path': '/dc1',
     'type': 'auth',
     'auth': {
       'type': 'basic_auth',
       'username': 'admin',
       'password': '123456'
     },
-    'next': ['/dc1', '/dc2']
+    'next': ['/dc1/dc']
   },
   {
     'path': '/dc2',
@@ -97,11 +97,25 @@ config = [
     'next': ['/dc2/dc']
   },
   {
-    'path': '/dc1',
+    'path': '/dc3',
+    'type': 'auth',
+    'auth': {
+      'type': 'cookie_auth',
+      'username': 'admin',
+      'password': '123456'
+    },
+    'next': ['/dc3/dc']
+  },
+  {
+    'path': '/dc1/dc',
     'type': 'xss'
   },
   {
     'path': '/dc2/dc',
+    'type': 'xss'
+  },
+  {
+    'path': '/dc3/dc',
     'type': 'xss'
   }
 ]
@@ -114,6 +128,9 @@ def route(url=''):
   url = '/{}'.format(url)
   if url == 'api/set_config':
     return set_config()
+  elif request.path == '/':
+    urls = [i['path'] for i in config if i['type'] == 'auth']
+    return render_template('next.html', urls=urls)
   else:
     handler = _routes.get(url, None)
     if handler:
@@ -132,7 +149,7 @@ def set_config():
       abort(403)
     return 'Rust master DC No.1!'
 
-def make_basic_auth_view(username='', password='', next='/'):
+def make_basic_auth_view(username='', password='', next=['/']):
   def _():
     auth = request.authorization
     if not auth or auth.username != username or auth.password != password:
@@ -152,6 +169,14 @@ def make_form_auth_view(username='', password='', next=['/'], action='/'):
         return render_template('form_auth.html', action=action)
   return _
 
+def make_cookie_auth_view(username='', password='', next=['/']):
+  def _():
+    if username == request.cookies.get('username', '') and password == request.cookies.get('password', ''):
+      return render_template('next.html', urls=next)
+    else:
+      return Response('Please Login', 401)
+  return _
+
 def add_route_from_config(config_item_list: list):
   for item in config_item_list:
     if item['type'] == 'auth':
@@ -159,6 +184,8 @@ def add_route_from_config(config_item_list: list):
         _routes[item['path']] = make_basic_auth_view(item['auth']['username'], item['auth']['password'], item['next'])
       elif item['auth']['type'] == 'form_auth':
         _routes[item['path']] = make_form_auth_view(item['auth']['username'], item['auth']['password'], item['next'], item['path'])
+      elif item['auth']['type'] == 'cookie_auth':
+        _routes[item['path']] = make_cookie_auth_view(item['auth']['username'], item['auth']['password'], item['next'])
     elif item['type'] == 'xss':
       def _():
         if request.method == 'GET':
