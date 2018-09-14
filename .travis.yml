@@ -1,0 +1,15 @@
+sudo: required
+services:
+  - docker
+language: python
+python:
+  - "3.6"
+install:
+  - pip install -r requirements.txt
+script:
+  - echo "Master DC!"
+deploy:
+  provider: script
+  script: bash .travis/docker_push.sh
+  on:
+    branch: master

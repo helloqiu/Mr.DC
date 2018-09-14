@@ -1,4 +1,6 @@
 # DC 老师很棒！
+[![Build Status](https://travis-ci.org/helloqiu/Mr.DC.svg?branch=master)](https://travis-ci.org/helloqiu/Mr.DC)  
+
 众所周知，DC 老师是一名 rust 大师。  
 # Description
 This project is a toy to test web scanner whether it can find more vulnerabilities after it bypassing the login page. Because this project is only for testing and funny, I name it `Mr.DC`, who is a master in rust.
