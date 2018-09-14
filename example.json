@@ -1,0 +1,51 @@
+{
+  "path": "/",
+  "type": "general",
+  "subpage": [
+    {
+      "path": "/dc1",
+      "type": "auth",
+      "auth": {
+        "type": "basic_auth",
+        "username": "admin",
+        "password": "123456"
+      },
+      "subpage": [
+        {
+          "path": "/dc1/dc",
+          "type": "xss"
+        }
+      ]
+    },
+    {
+      "path": "/dc2",
+      "type": "auth",
+      "auth": {
+        "type": "form_auth",
+        "username": "admin",
+        "password": "123456"
+      },
+      "subpage": [
+        {
+          "path": "/dc2/dc",
+          "type": "xss"
+        }
+      ]
+    },
+    {
+      "path": "/dc3",
+      "type": "auth",
+      "auth": {
+        "type": "cookie_auth",
+        "username": "admin",
+        "password": "123456"
+      },
+      "subpage": [
+        {
+          "path": "/dc3/dc",
+          "type": "xss"
+        }
+      ]
+    }
+  ]
+}

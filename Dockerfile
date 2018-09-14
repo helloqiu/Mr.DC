@@ -2,6 +2,7 @@ FROM python:slim
 
 ADD DC.py /DC/
 ADD run.py /DC/
+ADD example.json /DC/
 ADD requirements.txt /DC/
 ADD templates /DC/templates/
 

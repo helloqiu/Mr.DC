@@ -75,61 +75,17 @@ from flask import Flask, request, abort, Response, render_template
 import json
 
 app = Flask(__name__)
-config = [
-  {
-    'path': '/dc1',
-    'type': 'auth',
-    'auth': {
-      'type': 'basic_auth',
-      'username': 'admin',
-      'password': '123456'
-    },
-    'next': ['/dc1/dc']
-  },
-  {
-    'path': '/dc2',
-    'type': 'auth',
-    'auth': {
-      'type': 'form_auth',
-      'username': 'admin',
-      'password': '123456'
-    },
-    'next': ['/dc2/dc']
-  },
-  {
-    'path': '/dc3',
-    'type': 'auth',
-    'auth': {
-      'type': 'cookie_auth',
-      'username': 'admin',
-      'password': '123456'
-    },
-    'next': ['/dc3/dc']
-  },
-  {
-    'path': '/dc1/dc',
-    'type': 'xss'
-  },
-  {
-    'path': '/dc2/dc',
-    'type': 'xss'
-  },
-  {
-    'path': '/dc3/dc',
-    'type': 'xss'
-  }
-]
+config = {}
+with open('example.json', 'r') as f:
+  config = json.loads(f.read())
 _routes = {}
 
 @app.route('/<path:url>', methods=['GET', 'POST'])
 @app.route('/', methods=['GET', 'POST'])
 def route(url=''):
-  url = '/{}'.format(url)
+  url = '/' if request.path == '/' else '/{}'.format(url)
   if url == 'api/set_config':
     return set_config()
-  elif request.path == '/':
-    urls = [i['path'] for i in config if i['type'] == 'auth']
-    return render_template('next.html', urls=urls)
   else:
     handler = _routes.get(url, None)
     if handler:
@@ -148,20 +104,27 @@ def set_config():
       abort(403)
     return 'Rust master DC No.1!'
 
-def make_basic_auth_view(username='', password='', next=['/']):
-  def _():
+def make_basic_auth_view(username='', password='', next=['/'], auth_func=[]):
+  def _basic_auth():
     auth = request.authorization
     if not auth or auth.username != username or auth.password != password:
       return Response('Please Login', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
-    else:
-      return render_template('next.html', urls=next)
+  auth_func.append(_basic_auth)
+  def _():
+    for func in auth_func:
+      result = func()
+      if result:
+        return result
+    return render_template('next.html', urls=next)
   return _
 
-def make_form_auth_view(username='', password='', next=['/'], action='/'):
+def make_form_auth_view(username='', password='', next=['/'], action='/', auth_func=[]):
+  def _form_auth():
+    if username != request.cookies.get('username', '') or password != request.cookies.get('password', ''):
+      abort(403)
+  auth_func.append(_form_auth)
   def _():
     if request.method == 'GET':
-      if username == request.cookies.get('username', '') and password == request.cookies.get('password', ''):
-        return render_template('next.html', urls=next)
       return render_template('form_auth.html', action=action)
     elif request.method == 'POST':
       if username == request.form.get('username', '') and password == request.form.get('password', ''):
@@ -170,10 +133,14 @@ def make_form_auth_view(username='', password='', next=['/'], action='/'):
         resp.set_cookie('password', password)
         return resp
       else:
-        return render_template('form_auth.html', action=action)
+        return Response(render_template('form_auth.html', action=action), 403)
   return _
 
-def make_cookie_auth_view(username='', password='', next=['/']):
+def make_cookie_auth_view(username='', password='', next=['/'], auth_func=[]):
+  def _cookie_auth():
+    if username != request.cookies.get('username', '') or password != request.cookies.get('password', ''):
+      abort(403)
+  auth_func.append(_cookie_auth)
   def _():
     if username == request.cookies.get('username', '') and password == request.cookies.get('password', ''):
       resp = Response(render_template('next.html', urls=next))
@@ -183,21 +150,49 @@ def make_cookie_auth_view(username='', password='', next=['/']):
       return resp
   return _
 
-def add_route_from_config(config_item_list: list):
-  for item in config_item_list:
-    if item['type'] == 'auth':
-      if item['auth']['type'] == 'basic_auth':
-        _routes[item['path']] = make_basic_auth_view(item['auth']['username'], item['auth']['password'], item['next'])
-      elif item['auth']['type'] == 'form_auth':
-        _routes[item['path']] = make_form_auth_view(item['auth']['username'], item['auth']['password'], item['next'], item['path'])
-      elif item['auth']['type'] == 'cookie_auth':
-        _routes[item['path']] = make_cookie_auth_view(item['auth']['username'], item['auth']['password'], item['next'])
-    elif item['type'] == 'xss':
-      def _():
-        if request.method == 'GET':
-          return render_template('xss.html', action=item['path'])
-        elif request.method == 'POST':
-          return request.form.get('hello', '')
-      _routes[item['path']] = _
+def make_xss_view(path='', auth_func=[]):
+  def _():
+    for func in auth_func:
+      result = func()
+      if result:
+        return result
+    if request.method == 'GET':
+      return render_template('xss.html', action=path)
+    elif request.method == 'POST':
+      return request.form.get('hello', '')
+  return _
 
+def make_general_view(urls=[], auth_func=[]):
+  def _():
+    for func in auth_func:
+      result = func()
+      if result:
+        return result
+    return render_template('next.html', urls=urls)
+  return _
+
+def get_all_subpage_path(item):
+  result = [item['path']]
+  subpage = item.get('subpage', [])
+  for page in subpage:
+    result += get_all_subpage_path(page)
+  if '/' in result:
+    result.remove('/')
+  return result
+
+def add_route_from_config(item, auth_func=[]):
+  temp_auth_func = [] + auth_func
+  if item['type'] == 'auth':
+    if item['auth']['type'] == 'basic_auth':
+      _routes[item['path']] = make_basic_auth_view(item['auth']['username'], item['auth']['password'], get_all_subpage_path(item), auth_func=temp_auth_func)
+    elif item['auth']['type'] == 'form_auth':
+      _routes[item['path']] = make_form_auth_view(item['auth']['username'], item['auth']['password'], get_all_subpage_path(item), item['path'], auth_func=temp_auth_func)
+    elif item['auth']['type'] == 'cookie_auth':
+      _routes[item['path']] = make_cookie_auth_view(item['auth']['username'], item['auth']['password'], get_all_subpage_path(item), auth_func=temp_auth_func)
+  elif item['type'] == 'xss':
+    _routes[item['path']] = make_xss_view(path=item['path'], auth_func=temp_auth_func)
+  elif item['type'] == 'general':
+    _routes[item['path']] = make_general_view(urls=get_all_subpage_path(item), auth_func=temp_auth_func)
+  for i in item.get('subpage', []):
+    add_route_from_config(i, temp_auth_func + [])
 add_route_from_config(config)
